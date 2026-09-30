@@ -65,7 +65,7 @@ public:
   /** constructs a TestDataset object with the given file name.
    *  @param fileName The name of the DICOM file to create.
    */
-  TestDataset(const std::string &fileName)
+  TestDataset(const OFString &fileName)
     : fileName_(fileName) {}
 
   /** Destructor that deletes the DICOM file created by this object.
@@ -84,7 +84,7 @@ public:
   OFCondition create(Uint8 numGroups, Uint8 numElementsPerGroups);
 
 private:
-  std::string fileName_;
+  OFString fileName_;
 };
 
 
@@ -132,7 +132,7 @@ OFCondition TestDataset::create(Uint8 numGroups, Uint8 numElementsPerGroups)
  * @return A pair where the first element is true if all elements match the expected values, false otherwise,
  *         and the second element is an error message if the check failed.
  */
-static std::pair<bool, OFString> checkItem(DcmItem* ditem, Uint16 group, Uint8 numElements)
+static OFPair<bool, OFString> checkItem(DcmItem* ditem, Uint16 group, Uint8 numElements)
 {
   OFCondition cond = EC_Normal;
   for (Uint8 element = 0; element < numElements ; ++element)
@@ -144,13 +144,13 @@ static std::pair<bool, OFString> checkItem(DcmItem* ditem, Uint16 group, Uint8 n
 
     cond = ditem->findAndGetOFStringArray(DcmTag(DcmTagKey(group, elementTag), EVR_LO), value);
     if (cond.bad()) {
-      return std::make_pair(false, "Failed to find element: " + std::to_string(group) + "," + std::to_string(elementTag) + ": " + cond.text());
+      return OFMake_pair(false, "Failed to find element: " + std::to_string(group) + "," + std::to_string(elementTag) + ": " + cond.text());
     }
     if (value != expectedValue) {
-      return std::make_pair(false, "Value mismatch for element: " + std::to_string(group) + "," + std::to_string(elementTag) + ": expected '" + expectedValue + "', got '" + value + "'");
+      return OFMake_pair(false, "Value mismatch for element: " + std::to_string(group) + "," + std::to_string(elementTag) + ": expected '" + expectedValue + "', got '" + value + "'");
     }
   }
-  return std::make_pair(true, "");
+  return OFMake_pair(true, "");
 }
 
 
@@ -196,7 +196,7 @@ OFTEST(dcmdata_fhstrm_single) {
     DcmItem* ditem = seq->getItem(g);
     Uint16 group = getGroup(g);
 
-    std::pair<bool, OFString> checkItemResult = checkItem(ditem, group, numElements);
+    OFPair<bool, OFString> checkItemResult = checkItem(ditem, group, numElements);
     if (!checkItemResult.first) {
       OFCHECK_FAIL("Error in group " << (int)g << ": " << checkItemResult.second << OFendl);
       return;
@@ -230,7 +230,7 @@ public:
 
   virtual void run()
   {
-    std::pair<bool, OFString> checkItemResult = checkItem(ditem_, group_, numElements_);
+    OFPair<bool, OFString> checkItemResult = checkItem(ditem_, group_, numElements_);
     if (!checkItemResult.first) {
       good_ = false;
       errMsg_ = checkItemResult.second;
@@ -240,7 +240,7 @@ public:
 private:
   DcmItem *ditem_;
   Uint16 group_;
-  Uint16 numElements_;
+  Uint8 numElements_;
   bool good_;
   OFString errMsg_;
 };
@@ -282,10 +282,11 @@ OFTEST(dcmdata_fhstrm_lazy) {
     return;
   }
 
-  LazyReader* readers[numGroups];
+  OFVector<LazyReader*> readers;
   for (Uint8 g = 0; g < numGroups; ++g) {
-    readers[g] = new LazyReader(seq->getItem(g), g, numElements);
-    readers[g]->start();
+    LazyReader* reader = new LazyReader(seq->getItem(g), g, numElements);
+    readers.push_back( reader );
+    reader->start();
   }
 
   for (Uint8 g = 0; g < numGroups; ++g) {
@@ -311,10 +312,10 @@ public:
    * @param groupIndex Index of the group (item) to be read from the sequence.
    * @param numElementsPerGroups Number of elements expected per group.
    */
-  AlwaysReader(DcmFileHandleLoader& loader, Uint8 groupIndex, Uint8 numElementsPerGroups)
+  AlwaysReader(DcmFileHandleLoader& loader, Uint8 groupIndex, Uint8 numElements)
   : loader_(loader)
   , groupIndex_(groupIndex)
-  , numElements_(numElementsPerGroups)
+  , numElements_(numElements)
   , good_(true)
   , errMsg_("")
   {
@@ -356,7 +357,7 @@ public:
     DcmItem* ditem = seq->getItem(groupIndex_);
     Uint16 group = getGroup(groupIndex_);
 
-    std::pair<bool, OFString> checkItemResult = checkItem(ditem, group, numElements_);
+    OFPair<bool, OFString> checkItemResult = checkItem(ditem, group, numElements_);
     if (!checkItemResult.first) {
       good_ = false;
       errMsg_ = checkItemResult.second;
@@ -366,7 +367,7 @@ public:
 private:
   DcmFileHandleLoader& loader_;
   Uint16 groupIndex_;
-  Uint16 numElements_;
+  Uint8 numElements_;
   bool good_;
   OFString errMsg_;
 };
@@ -391,10 +392,11 @@ OFTEST(dcmdata_fhstrm_multi) {
 
   DcmFileHandleLoader loader(filename, EDFH_Multi);
 
-  AlwaysReader* readers[numGroups];
+  OFVector<AlwaysReader*> readers;
   for (Uint8 g = 0; g < numGroups; ++g) {
-    readers[g] = new AlwaysReader(loader, g, numElements);
-    readers[g]->start();
+    AlwaysReader* reader = new AlwaysReader(loader, g, numElements);
+    readers.push_back(reader);
+    reader->start();
   }
 
   for (Uint8 g = 0; g < numGroups; ++g) {
